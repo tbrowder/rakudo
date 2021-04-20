@@ -25,6 +25,8 @@ my class DateTime does Dateish {
                 $last-dst = nqp::atpos_i($lt,8);
 
                 # algorithm from Claus Tøndering
+                # which algorithm, to do what?
+                # TODO check the algorithm, his other is wrong, and this appears to be, too (@tbrowder)
                 my int $a = (14 - nqp::atpos_i($lt,4)) div 12;
                 my int $y = nqp::atpos_i($lt,5) + 4800 - $a;
                 my int $m = nqp::atpos_i($lt,4) + 12 * $a - 3;
@@ -36,6 +38,7 @@ my class DateTime does Dateish {
                     + nqp::atpos_i($lt,1) * 60
                     + nqp::atpos_i($lt,0)
                 ) - $utc
+                # end of algorithm from Claus Tøndering
             }
 
             # cannot have been a DST change
@@ -261,16 +264,32 @@ my class DateTime does Dateish {
     --> DateTime:D) {
 
         # Interpret $time as a POSIX time in seconds since (or before) the Unix epoch.
+
+        # POSIX epoch: 1970-01-01T00:00:00Z
+        constant posix-epoch-jd = 2_440_587.5;
+        constant sec-per-day    = 86400;
+        constant posix-epoch    = posix-epoch-jd * sec-per-day; 
+
+        # handle negative POSIX epoch values less than 0001-01-01T00:00:00Z 
+        #constant \AD-min-julian-date = 1_720_057.5; # from JPL Time Conversion Tool
+        #constant \min-posix-epoch = (AD-min-julian-date - posix-epoch-jd) * sec-per-day; 
+
+        # handle negative POSIX epoch values less than '1879-03-14T00:00:00.000Z').later(:second(.7)),
+        #   round down to 1879-01-01T00:00:00Z
+        #   JD = 2407350.5 (from JPL Time Conversion Tool)
+        constant test-epoch-jd = 2_407_350.5;
+        constant test-epoch    = (test-epoch-jd - posix-epoch-jd) * sec-per-day; 
+
+        #return self!negative-posix-epoch($epoch, :$timezone, :&formatter, |%_) if $epoch < min-unix-epoch;
+        #return self!negative-posix-epoch($epoch, :$timezone, :&formatter, |%_);
+        # handle negative POSIX epoch values (less than 1970-11-01T00:00:00Z 
+        #return self!negative-posix-epoch($epoch, :$timezone, :&formatter, |%_) if $epoch < posix-epoch;
+        #return self!negative-posix-epoch($epoch, :$timezone, :&formatter, |%_) if $epoch < 0;
+        return self!negative-posix-epoch($epoch, :$timezone, :&formatter, |%_) if $epoch < test-epoch;
+
         # allow for timezone offset
         $epoch = $epoch + $timezone;
 
-        constant \unix-epoch-jd = 2_440_587.5;
-        constant \sec-per-day   = 86400;
-        # handle negative POSIX epoch values less than 0001-01-01T00:00:00Z 
-        constant \AD-min-julian-date = 1_720_057.5; # from JPL Time Conversion Tool
-        constant \min-unix-epoch = (AD-min-julian-date - unix-epoch-jd) * sec-per-day; 
-        return self!negative-posix-epoch($epoch, :$timezone, :&formatter, |%_) if $epoch < min-unix-epoch;
-        
         # use normal handling for most A.D. dates
         # $epoch >= min-epoch
         my $second := $epoch % 60;
@@ -281,7 +300,8 @@ my class DateTime does Dateish {
         my Int $days    := nqp::div_I($hours, 24, Int);
 
         # Day month and leap year arithmetic, based on Gregorian day #.
-        # 2000-01-01 noon UTC == 2451558.0 Julian == 2451545.0 Gregorian
+        # 2000-01-01 noon UTC == 2451558.0 Julian
+        # 2000-01-01 noon UTC == 2451545.0 Gregorian
         my Int $julian := $days + 2440588;   # because 2000-01-01 == Unix epoch day 10957
 
         my Int $a := $julian + 32044;     # date algorithm from Claus Tøndering
@@ -417,7 +437,16 @@ my class DateTime does Dateish {
     }
 
     method modified-julian-date(DateTime:D: --> Real:D) {
-        self.daycount + self.day-fraction
+        constant posix-epoch-jd = 2_440_587.5;
+        constant mjd-epoch-jd   = 2_400_000.5; # MJD epoch
+        constant sec-per-day    = 86400;
+        # seconds since POSIX epoch 
+        my $p = self.posix;
+        # days since POSIX epoch 
+        my $d = $p/sec-per-day;
+        # days since MJD epoch
+        $d = $d - mjd-epoch-jd;
+        $d + self.day-fraction
     }
 
     method julian-date(DateTime:D: --> Real:D) {
@@ -428,6 +457,8 @@ my class DateTime does Dateish {
         return self.utc.posix if $!timezone && !$ignore-timezone;
 
         # algorithm from Claus Tøndering
+        # which algorithm, to do what?
+        # TODO check the algorithm, his other is wrong, and this appears to be, too (@tbrowder)
         my int $a = (14 - $!month) div 12;
         my int $y = $!year + 4800 - $a;
         my int $m = $!month + 12 * $a - 3;
@@ -437,6 +468,7 @@ my class DateTime does Dateish {
           + $!hour      * 3600
           + $!minute    * 60
           + self.whole-second
+        # end of algorithm from Claus Tøndering
     }
 
     method offset(DateTime:D:            --> Int:D) { $!timezone        }
@@ -634,9 +666,9 @@ my class DateTime does Dateish {
 
     method !negative-posix-epoch($epoch, :$timezone, :&formatter, *%_) {
         # convert epoch seconds to Julian date (days as a fraction)
-        constant \unix-epoch-jd = 2_440_587.5;
-        constant \sec-per-day   = 86400;
-        my $jd = unix-epoch-jd + $epoch/sec-per-day;
+        constant posix-epoch-jd = 2_440_587.5;
+        constant sec-per-day   = 86400;
+        my $jd = posix-epoch-jd + $epoch/sec-per-day;
         # use jd2cal sub from Perl module Astro::Montenbruck::Time.pm
         # assume Gregorian calendar
         my ($ye, $mo, $da) = self!jd2cal($jd, :gregorian(False));

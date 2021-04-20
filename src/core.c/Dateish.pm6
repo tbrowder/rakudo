@@ -268,7 +268,7 @@ my role Dateish {
 # <ISO 8601|http://en.wikipedia.org/wiki/ISO_8601>
 # <Time zones|http://en.wikipedia.org/wiki/List_of_time_zones>
 #
-# As per the recommendation, the strftime() method has bee moved into a
+# As per the recommendation, the strftime() method has been moved into a
 # loadable module called DateTime::strftime.
 #
 # =end pod
