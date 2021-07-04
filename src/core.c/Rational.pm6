@@ -257,7 +257,7 @@ my role Rational[::NuT = Int, ::DeT = ::("NuT")] does Real {
 
     # Actual .base conversion workhorse.  Takes base, precision (0 for
     # conversion until no fractional part left) and a flag indicating
-    # whether the preserve trailing zeroes
+    # whether to preserve trailing zeroes
     method !base(
       Int:D $base,             # radix to output value in
       int $digits,             # number of digits to generate, 0 = indefinite

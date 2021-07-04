@@ -13,7 +13,12 @@ my role Numeric {
         (try my \numeric = a.Numeric).defined
                 ?? (self.isNaN && numeric.isNaN or numeric == self)
                 !! False
-    }
+     }
+
+    proto method modf(|) {*}
+    multi method modf(Numeric:D: --> List)                  { self.modf }
+    multi method modf(Numeric:D: Cool $places? --> List)    { self.modf($places) }
+    multi method modf(Numeric:D: Numeric $places? --> List) { self.modf($places) }
 
     proto method log(|) {*}
     multi method log(Numeric:D: Cool $base) { self.log / $base.Numeric.log }

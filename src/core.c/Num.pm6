@@ -169,25 +169,29 @@ my class Num does Real { # declared in BOOTSTRAP
         nqp::p6box_n(nqp::sin_n(nqp::unbox_n(self)));
     }
 
-    proto method modf(|) {*} 
+    proto method modf(|) {*}
     multi method modf(Num:D: Num $places? --> List) { # method source of the return values, patterned after sub log
-        my $x = self; 
-        my \sign = $x.sign;
-        $x .= abs;  # now signless
-
-        # operate on absolute parts
-        my $int  = $x.Int;  
-        my $frac = $x - $int;
-        # restore original sign
-        $int  *= sign; 
-        $frac *= sign; 
-        $int  = 0 if $int  == 0;
-        $frac = 0 if $frac == 0;
-
-        if $places.defined and $places > 0 {
-            $frac = sprintf '%.*f', $places, $frac;
+        my $min = -2**32-1;
+        my $max =  2**32-1;
+        my ($int, $frac);
+        if !($min < self < $max) {
+            $int  = self.Str;
+            $frac = "Error: out of range '$min..$max'";
         }
-
+        else {
+            my $xs = $places.defined and $places > 0
+                     ?? self.base(10, $places)
+                     !! self.base(10);
+            my $idx = index $xs, '.';
+            if $idx.defined {
+                $int  = $xs.substr: $idx;
+                $frac = $xs.substr: 0, $idx;
+            }
+            else {
+                $int  = $xs;
+                $frac = 0;
+            }
+        }
         $int, $frac
     }
 
@@ -566,24 +570,43 @@ multi sub log(num $x --> num) {
     nqp::log_n($x);
 }
 
-multi sub modf(num $x is copy, num $places? --> List) { # sub source of the return values, patterned after sub log
-        my \sign = $x.sign;
-        $x .= abs;  # now signless
-
-        # operate on absolute parts
-        my $int  = $x.Int;  
-        my $frac = $x - $int;
-        # restore original sign
-        $int  *= sign; 
-        $frac *= sign; 
-        $int  = 0 if $int  == 0;
-        $frac = 0 if $frac == 0;
-
-        if $places.defined and $places > 0 {
-            $frac = sprintf '%.*f', $places, $frac;
+multi sub modf(num $x, num $places? --> List) { # sub source of the return values, patterned after sub log
+    my $min = -2**32-1;
+    my $max =  2**32-1;
+    my ($int, $frac);
+    if !($min < $x < $max) {
+        $int  = $x.Str;
+        $frac = "Error: out of range '$min..$max'";
+    }
+    elsif $x ~~ Rational {
+        my $xs = $places.defined and $places > 0
+                 ?? $x.base(10, *)
+                 !! $x.base(10);
+        my $idx = index $xs, '.';
+        if $idx.defined {
+            $int  = $xs.substr: $idx;
+            $frac = $xs.substr: 0, $idx;
         }
-
-        $int, $frac
+        else {
+            $int  = $xs;
+            $frac = 0;
+        }
+    }
+    else {
+        my $xs = $places.defined and $places > 0
+                 ?? $x.base(10, $places)
+                 !! $x.base(10);
+        my $idx = index $xs, '.';
+        if $idx.defined {
+            $int  = $xs.substr: $idx;
+            $frac = $xs.substr: 0, $idx;
+        }
+        else {
+            $int  = $xs;
+            $frac = 0;
+        }
+    }
+    $int, $frac
 }
 
 multi sub sin(num $x --> num) {
@@ -681,6 +704,46 @@ multi sub ceiling(num $a --> num) {
 }
 multi sub sqrt(num $a --> num) {
     nqp::sqrt_n($a)
+}
+
+# helper routines for modf
+sub _modf-str(Str $s is copy, $places? --> List) {
+    # incoming string was created by the base routine
+
+    # check for the sign, if any
+    my $sign = '';
+    if $s ~~ /^ (<[+-]>) (.*) $/ {
+        $sign = ~$0;
+        $s    = ~$1;
+    }
+
+    my ($left, $right);
+    my $idx = index $s, '.';
+    if $idx.defined {
+        $left  = $s.substr: 0, $idx;
+        $right = $s.substr: $idx+1; # do NOT keep the decimal point here
+
+        # get the length of the bare right side
+        my $nr-chars = $right.chars;
+        # now embellish it
+        $right = '0.' ~ $right;
+
+        if $sign {
+            $left  = $sign ~ $left;
+            $right = $sign ~ $right;
+        }
+        # pad right with zeroes if need be
+        # note we do NOT trim any chars if right is too long
+        if $places.defined and $places > $nr-chars {
+            my $n = $places - $nr-chars;
+            $right ~= ('0' x $n);
+        }
+    }
+    else {
+        $left  = $sign ?? ($sign ~ $s) !! $s;
+        $right = '0';
+    }
+    $left, $right
 }
 
 # vim: expandtab shiftwidth=4
